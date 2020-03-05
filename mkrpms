@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+SPECFILE="formatUSB.spec"
+
+set -e
+
+#  Get the full path to the spec file
+SPECFILE=$(dirname "$(realpath "$0")")/$SPECFILE
+
+#  Parse the package name, version and release out of the spec file
+NAME=$(sed -n 's/^Name:[[:space:]]*//p' "$SPECFILE")
+VERSION=$(sed -n 's/^Version:[[:space:]]*//p' "$SPECFILE")
+RELEASE=$(sed -n 's/^Release:[[:space:]]*//;s/%{?dist}//p' "$SPECFILE")
+
+if [ $(cat /etc/hostname) == "fang.localdomain" ]; then
+	echo "Building $NAME in fedora-rpmbuild:30 container ..."
+	podman run --interactive --name=rpmbuild --rm --tty --volume=${HOME}:${HOME} localhost/fedora-rpmbuild:30 "$(realpath "$0")"
+	echo -e "\nBuilding $NAME in fedora-rpmbuild:31 container ..."
+	podman run --interactive --name=rpmbuild --rm --tty --volume=${HOME}:${HOME} localhost/fedora-rpmbuild:31 "$(realpath "$0")"
+	echo -e "\nTest installation of ${NAME}-${VERSION}-${RELEASE}.fc30.x86_64.rpm in fedora-rpmbuild:30 container ..."
+	podman run --interactive --name=rpmbuild --rm --tty --volume=${HOME}:${HOME} localhost/fedora-rpmbuild:30 dnf install -y ${HOME}/rpmbuild/RPMS/noarch/${NAME}-${VERSION}-${RELEASE}.fc30.noarch.rpm
+
+	echo -e "\nTest installation of ${NAME}-${VERSION}-${RELEASE}.fc31.x86_64.rpm in fedora-rpmbuild:31 container ..."
+	podman run --interactive --name=rpmbuild --rm --tty --volume=${HOME}:${HOME} localhost/fedora-rpmbuild:31 dnf install -y ${HOME}/rpmbuild/RPMS/noarch/${NAME}-${VERSION}-${RELEASE}.fc31.noarch.rpm
+	
+	echo -e "\nSending source RPM to COPR build ..."
+	copr-cli build ${NAME} ${HOME}/rpmbuild/SRPMS/${NAME}-${VERSION}-${RELEASE}.fc30.src.rpm
+	
+else
+	echo -e "\nUpdate system software ..."
+	dnf -y upgrade
+
+	#  Put the source files into place
+	SOURCE0=$(sed -n 's/^Source0:[[:space:]]*//p' "$SPECFILE")
+	SOURCE0=$(echo "$SOURCE0" | sed "s/%{name}/${NAME}/;s/%{version}/${VERSION}/")
+	X=$(dirname "$SPECFILE")
+	tar -zcvf "${HOME}/rpmbuild/SOURCES/${SOURCE0}" --transform="s|${X#/}|${NAME}-${VERSION}|" $(dirname "$SPECFILE")/formatUSB $(dirname "$SPECFILE")/LICENSE
+
+	#  Build the packages.  Try twice, in case of an Access Exception, which happens occasionally
+	if ! rpmbuild -ba "$SPECFILE"; then
+		echo -e "\nrpmbuild failed, retrying rpmbuild ..."
+		rpmbuild -ba "$SPECFILE"
+	fi
+
+	echo -e "\nCopying RPM files to host system ..."
+	mv ${HOME}/rpmbuild/RPMS/noarch/${NAME}-${VERSION}-${RELEASE}.*.noarch.rpm /home/dlk/rpmbuild/RPMS/noarch/
+	mv ${HOME}/rpmbuild/SRPMS/${NAME}-${VERSION}-${RELEASE}.*.src.rpm /home/dlk/rpmbuild/SRPMS/
+fi
