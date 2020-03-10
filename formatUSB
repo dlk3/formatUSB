@@ -70,7 +70,7 @@ else:
 
 #  Create the list of commands that need to be run to format the device
 cmd_list = []
-result = run_cmd('lsblk --raw --output name,type,mountpoint --noheadings /dev/{}'.format(device))
+result = run_cmd('lsblk --raw --output name,type,mountpoint --noheadings {}'.format(device))
 mountpoints = list(filter(None, str(result.stdout, 'utf-8').split('\n')))
 for mountpoint in mountpoints:
 	(name, ptype, mp) = mountpoint.split(' ', 2)
