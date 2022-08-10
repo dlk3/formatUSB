@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 
 #  Format removeable media, optionally with LUKS encryption
 
@@ -68,6 +68,20 @@ if not opts.label:
 else:
 	label = opts.label
 
+#  Check size of disk to ensure we don't exceed the MSDOS partition table size limit
+msdos_max_sectors = 4294967295
+part_size = '100%'
+result = run_cmd('lsblk --bytes --nodeps --raw --output SIZE,LOG-SEC --noheadings {}'.format(device))
+disk_size, sector_size = str(result.stdout, 'utf-8').split(' ')
+sectors = int(disk_size) / int(sector_size)
+if sectors > msdos_max_sectors:
+    print('{} is larger than the MSDOS 2TiB partition table limit.  Do you want to'.format(device))
+    answ = input('create a 2TiB partition on this disk? [Y|n] ')
+    if answ.upper() == 'N':
+        exit()
+    else:
+        part_size = '{}s'.format(msdos_max_sectors)
+	
 #  Create the list of commands that need to be run to format the device
 cmd_list = []
 result = run_cmd('lsblk --raw --output name,type,mountpoint --noheadings {}'.format(device))
@@ -91,7 +105,7 @@ cmd_list.extend([
 	},
 	{
 		'message': 'Creating new disk partition',
-		'command': 'sudo parted {} mkpart primary {} 1MiB 100%'.format(device, part_type)
+		'command': 'sudo parted {} mkpart primary {} 1MiB {}'.format(device, part_type, part_size)
 	},
 	{
 		'message': 'Setting partition boot flag on',
