@@ -1,7 +1,7 @@
 %define  debug_package %{nil}
 
 Name:		formatUSB
-Version:	1.0.1
+Version:	1.0.2
 Release:	1%{?dist}
 Summary:	Format Removable Media
 Source0:	%{name}-%{version}.tar.gz
@@ -24,6 +24,8 @@ install -m 755 -t %{buildroot}%{_bindir} formatUSB
 %{_bindir}/formatUSB
 
 %changelog
+* Tue Aug 10 2022 David King <dave@daveking.com> - 1.0.2-1
+	Handle disks larger than the 2TB MSDOS partition size limit
 * Tue Mar 10 2020 David King <dave@daveking.com> - 1.0.1-1
 	Fix device name in mounted check section
 * Thu Mar 5 2020 David King <dave@daveking.com> - 1.0.0-1

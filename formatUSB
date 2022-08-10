@@ -70,9 +70,10 @@ else:
 
 #  Check size of disk to ensure we don't exceed the MSDOS partition table size limit
 msdos_max_sectors = 4294967295
-part_size = '100%'
+part_end = '100%'
 result = run_cmd('lsblk --bytes --nodeps --raw --output SIZE,LOG-SEC --noheadings {}'.format(device))
 disk_size, sector_size = str(result.stdout, 'utf-8').split(' ')
+part_start = '{}s'.format(int(1048576 / int(sector_size)))
 sectors = int(disk_size) / int(sector_size)
 if sectors > msdos_max_sectors:
     print('{} is larger than the MSDOS 2TiB partition table limit.  Do you want to'.format(device))
@@ -80,7 +81,7 @@ if sectors > msdos_max_sectors:
     if answ.upper() == 'N':
         exit()
     else:
-        part_size = '{}s'.format(msdos_max_sectors)
+        part_end = '{}s'.format(int(1048576 / int(sector_size) + msdos_max_sectors - 1))
 	
 #  Create the list of commands that need to be run to format the device
 cmd_list = []
@@ -105,7 +106,7 @@ cmd_list.extend([
 	},
 	{
 		'message': 'Creating new disk partition',
-		'command': 'sudo parted {} mkpart primary {} 1MiB {}'.format(device, part_type, part_size)
+		'command': 'sudo parted {} mkpart primary {} {} {}'.format(device, part_type, part_start, part_end)
 	},
 	{
 		'message': 'Setting partition boot flag on',
