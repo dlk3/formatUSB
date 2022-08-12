@@ -54,12 +54,12 @@ if not opts.luks:
 	#  Find out if they want LUKS encryption or not
 	luks = input('Would you like the device to be LUKS encrypted? [y|N]: ')
 	if luks.upper() == 'Y':
-		part_type = 'ext4'
+		fs_type = 'ext4'
 		tempdir = tempfile.mkdtemp()
 		uu_id = 'luks-' + str(uuid.uuid4())
 		luks = True
 	else:
-		part_type = 'fat32'
+		fs_type = 'fat32'
 		luks = False
 
 #  Find out what disk label to use
@@ -71,15 +71,19 @@ else:
 #  Check size of disk to ensure we don't exceed the MSDOS partition table size limit
 msdos_max_sectors = 4294967295
 part_end = '100%'
+label_type = 'msdos'
 result = run_cmd('lsblk --bytes --nodeps --raw --output SIZE,LOG-SEC --noheadings {}'.format(device))
 disk_size, sector_size = str(result.stdout, 'utf-8').split(' ')
 part_start = '{}s'.format(int(1048576 / int(sector_size)))
 sectors = int(disk_size) / int(sector_size)
 if sectors > msdos_max_sectors:
-    print('{} is larger than the MSDOS 2TiB partition table limit.  Do you want to'.format(device))
-    answ = input('create a 2TiB partition on this disk? [Y|n] ')
+    print('\n{} is larger than the MSDOS 2TiB partition table limit.  With a MSDOS'.format(device))
+    print('partition table and a 2TiB partition the disk will be recognized as a USB key')
+    print('and will be mounted automatically by the system.  With a GPT partition table and')
+    print('a full disk partition the disk will need to be mounted manually.')
+    answ = input('\nCreate a 2TiB partition on this disk? [Y|n] ')
     if answ.upper() == 'N':
-        exit()
+        label_type = 'gpt'
     else:
         part_end = '{}s'.format(int(1048576 / int(sector_size) + msdos_max_sectors - 1))
 	
@@ -102,11 +106,11 @@ for mountpoint in mountpoints:
 
 cmd_list.extend([
 	{
-		'command': 'sudo parted {} mklabel msdos'.format(device)
+		'command': 'sudo parted {} mklabel {}'.format(device, label_type)
 	},
 	{
 		'message': 'Creating new disk partition',
-		'command': 'sudo parted {} mkpart primary {} {} {}'.format(device, part_type, part_start, part_end)
+		'command': 'sudo parted {} mkpart primary {} {} {}'.format(device, fs_type, part_start, part_end)
 	},
 	{
 		'message': 'Setting partition boot flag on',
@@ -168,3 +172,12 @@ if luks:
 	os.rmdir(tempdir)
 	
 print('\nYou should remove and reinsert the device before using it')
+
+if label_type == 'gpt' and luks:
+    print('\nUse the following commands to manually mount the disk:')
+    print('    sudo cryptsetup luksOpen {} "{}"'.format(device, uu_id))
+    print('    sudo mount "/dev/mapper/{}" /MOUNTPOINT'.format(uu_id))
+    print('and to unmount:')
+    print('    sudo umount /MOUNTPOINT')
+    print('    sudo cryptsetup close "{}"'.format(uu_id))
+	
