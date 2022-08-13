@@ -153,9 +153,10 @@ else:
 	})
 	
 #  Eject the disk at the end
-cmd_list.append({
-	'command': 'sudo eject {}'.format(device)
-})
+if label_type == 'msdos':
+    cmd_list.append({
+	    'command': 'sudo eject {}'.format(device)
+    })
 
 #  Execute each command in the list
 for cmd in cmd_list:
@@ -174,10 +175,11 @@ if luks:
 print('\nYou should remove and reinsert the device before using it')
 
 if label_type == 'gpt' and luks:
-    print('\nUse the following commands to manually mount the disk:')
+    print('\nUse these commands to manually mount this disk:')
     print('    sudo cryptsetup luksOpen {} "{}"'.format(device, uu_id))
     print('    sudo mount "/dev/mapper/{}" /MOUNTPOINT'.format(uu_id))
     print('and to unmount:')
     print('    sudo umount /MOUNTPOINT')
     print('    sudo cryptsetup close "{}"'.format(uu_id))
 	
+
