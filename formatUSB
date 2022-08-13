@@ -52,40 +52,46 @@ if answ.upper() != 'Y':
 
 if not opts.luks:
 	#  Find out if they want LUKS encryption or not
+	luks = False
 	luks = input('Would you like the device to be LUKS encrypted? [y|N]: ')
 	if luks.upper() == 'Y':
-		fs_type = 'ext4'
 		tempdir = tempfile.mkdtemp()
 		uu_id = 'luks-' + str(uuid.uuid4())
 		luks = True
-	else:
-		fs_type = 'fat32'
-		luks = False
 
 #  Find out what disk label to use
-if not opts.label:
-	label = input('What name (disk label) do you want to give this device?: ')
-else:
+label = ''
+if opts.label:
 	label = opts.label
+if label == '':
+	valid_label = False
+	while not valid_label:
+		label = input('What name (disk label) do you want to give this device?: ')
+		if len(label) < 12:
+			valid_label = True
+		else:
+			print('exFAT disk labels cannot be more than 11 characters long.')
 
 #  Check size of disk to ensure we don't exceed the MSDOS partition table size limit
 msdos_max_sectors = 4294967295
-part_end = '100%'
-label_type = 'msdos'
+label_type = 'dos'
 result = run_cmd('lsblk --bytes --nodeps --raw --output SIZE,LOG-SEC --noheadings {}'.format(device))
 disk_size, sector_size = str(result.stdout, 'utf-8').split(' ')
-part_start = '{}s'.format(int(1048576 / int(sector_size)))
 sectors = int(disk_size) / int(sector_size)
 if sectors > msdos_max_sectors:
-    print('\n{} is larger than the MSDOS 2TiB partition table limit.  With a MSDOS'.format(device))
-    print('partition table and a 2TiB partition the disk will be recognized as a USB key')
-    print('and will be mounted automatically by the system.  With a GPT partition table and')
-    print('a full disk partition the disk will need to be mounted manually.')
-    answ = input('\nCreate a 2TiB partition on this disk? [Y|n] ')
-    if answ.upper() == 'N':
-        label_type = 'gpt'
-    else:
-        part_end = '{}s'.format(int(1048576 / int(sector_size) + msdos_max_sectors - 1))
+	label_type = 'gpt'
+
+# part_start = '{}s'.format(int(1048576 / int(sector_size)))
+# if sectors > msdos_max_sectors:
+#    print('\n{} is larger than the MSDOS 2TiB partition table limit.  With a MSDOS'.format(device))
+#    print('partition table and a 2TiB partition the disk will be recognized as a USB key')
+#    print('and will be mounted automatically by the system.  With a GPT partition table and')
+#    print('a full disk partition the disk will need to be mounted manually.')
+#    answ = input('\nCreate a 2TiB partition on this disk? [Y|n] ')
+#    if answ.upper() == 'N':
+#        label_type = 'gpt'
+#    else:
+#        part_end = '{}s'.format(int(1048576 / int(sector_size) + msdos_max_sectors - 1))
 	
 #  Create the list of commands that need to be run to format the device
 cmd_list = []
@@ -104,21 +110,7 @@ for mountpoint in mountpoints:
 			'command': 'sudo cryptsetup close \'/dev/mapper/{}\''.format(name),
 		})
 
-cmd_list.extend([
-	{
-		'command': 'sudo parted {} mklabel {}'.format(device, label_type)
-	},
-	{
-		'message': 'Creating new disk partition',
-		'command': 'sudo parted {} mkpart primary {} {} {}'.format(device, fs_type, part_start, part_end)
-	},
-	{
-		'message': 'Setting partition boot flag on',
-		'command': 'sudo parted {} set 1 boot on'.format(device)
-	}
-])
 
-#  Depending on whether it's a LUKS or FAT32 partition ...
 if luks:
 	cmd_list.extend([
 		{
@@ -130,8 +122,8 @@ if luks:
 			'command': 'sudo cryptsetup luksOpen {}1 "{}"'.format(device, uu_id)
 		},
 		{
-			'message': '\nCreating an ext4 filesystem in the encrypted partition',
-			'command': 'sudo mkfs.ext4 "/dev/mapper/{}" -L "{}"'.format(uu_id, label)
+			'message': 'Creating an exfat filesystem in the encrypted partition',
+			'command': 'sudo mkfs.exfat -L "{}" /dev/mapper/{}'.format(label, uu_id)
 		},
 		{
 			'command': 'sudo mount "/dev/mapper/{}" {}'.format(uu_id, tempdir)
@@ -147,16 +139,16 @@ if luks:
 		}
 	])
 else:
-	cmd_list.append({
-			'message': 'Creating a fat32 filesystem in the new partition',
-			'command': 'sudo mkfs.vfat -n "{}" {}1'.format(label, device)
-	})
-	
-#  Eject the disk at the end
-if label_type == 'msdos':
-    cmd_list.append({
-	    'command': 'sudo eject {}'.format(device)
-    })
+	cmd_list.extend([
+		{
+			'message': 'Repartitioning the disk',
+			'command': 'echo -e "label: {}\nstart=2048 size=100TB bootable name=\\\"{}\\\"" | sudo sfdisk --wipe always {}'.format(label_type, label, device)
+		},
+		{
+			'message': 'Creating an exfat filesystem in the new partition',
+			'command': 'sudo mkfs.exfat -L "{}" {}1'.format(label, device)
+		}
+	])
 
 #  Execute each command in the list
 for cmd in cmd_list:
@@ -173,13 +165,3 @@ if luks:
 	os.rmdir(tempdir)
 	
 print('\nYou should remove and reinsert the device before using it')
-
-if label_type == 'gpt' and luks:
-    print('\nUse these commands to manually mount this disk:')
-    print('    sudo cryptsetup luksOpen {} "{}"'.format(device, uu_id))
-    print('    sudo mount "/dev/mapper/{}" /MOUNTPOINT'.format(uu_id))
-    print('and to unmount:')
-    print('    sudo umount /MOUNTPOINT')
-    print('    sudo cryptsetup close "{}"'.format(uu_id))
-	
-
