@@ -1,7 +1,7 @@
 %define  debug_package %{nil}
 
 Name:		formatUSB
-Version:	1.0.5
+Version:	1.0.6
 Release:	1%{?dist}
 Summary:	Format Removable Media
 Source0:	%{name}-%{version}.tar.gz
@@ -24,13 +24,15 @@ install -m 755 -t %{buildroot}%{_bindir} formatUSB
 %{_bindir}/formatUSB
 
 %changelog
+* Sun Aug 14 2022 David King <dave@daveking.com> - 1.0.6-1
+        Fix error with partition start specification
 * Sat Aug 13 2022 David King <dave@daveking.com> - 1.0.5-1
         - Switch to exfat filesystem for both large and small disks
         - Use sfdisk for partitioning instead of parted
 * Fri Aug 12 2022 David King <dave@daveking.com> - 1.0.4-1
 	Prompt to format disks larger than the 2TB MSDOS partition size limit
         with either GPT or MSDOS partition table
-* Tue Aug 10 2022 David King <dave@daveking.com> - 1.0.3-1
+* Wed Aug 10 2022 David King <dave@daveking.com> - 1.0.3-1
 	Handle disks larger than the 2TB MSDOS partition size limit
 * Tue Mar 10 2020 David King <dave@daveking.com> - 1.0.1-1
 	Fix device name in mounted check section

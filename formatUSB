@@ -70,16 +70,17 @@ if label == '':
 		if len(label) < 12:
 			valid_label = True
 		else:
-			print('exFAT disk labels cannot be more than 11 characters long.')
+			print('exFAT filesystem disk labels cannot be more than 11 characters long.')
 
-#  Check size of disk to ensure we don't exceed the MSDOS partition table size limit
+#  Check size of disk and change to GPT table type if disk is too large for a 
+#  MSDOS partition table
 msdos_max_sectors = 4294967295
-label_type = 'dos'
+tbl_type = 'dos'
 result = run_cmd('lsblk --bytes --nodeps --raw --output SIZE,LOG-SEC --noheadings {}'.format(device))
 disk_size, sector_size = str(result.stdout, 'utf-8').split(' ')
 sectors = int(disk_size) / int(sector_size)
 if sectors > msdos_max_sectors:
-	label_type = 'gpt'
+	tbl_type = 'gpt'
 
 # part_start = '{}s'.format(int(1048576 / int(sector_size)))
 # if sectors > msdos_max_sectors:
@@ -142,7 +143,7 @@ else:
 	cmd_list.extend([
 		{
 			'message': 'Repartitioning the disk',
-			'command': 'echo -e "label: {}\nstart=2048 size=100TB bootable name=\\\"{}\\\"" | sudo sfdisk --wipe always {}'.format(label_type, label, device)
+			'command': 'echo -e "label: {}\nstart=1MiB bootable name=\\\"{}\\\"" | sudo sfdisk --wipe always {}'.format(tbl_type, label, device)
 		},
 		{
 			'message': 'Creating an exfat filesystem in the new partition',
